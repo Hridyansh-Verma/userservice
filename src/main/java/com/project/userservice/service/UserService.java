@@ -85,4 +85,12 @@ public class UserService {
             throw new TokenInvalidException("Token is invalid");
         }
     }
+    public User validateToken(String token) {
+        Optional<Token> tokenOptional = tokenRepository.findByValueAndIsDeletedEqualsAndExpiryAtGreaterThan(token,false,new Date());
+        if(tokenOptional.isPresent())
+        {
+            return tokenOptional.get().getUser();
+        }
+        return null;
+    }
 }
