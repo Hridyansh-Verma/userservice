@@ -1,73 +1,83 @@
 package com.project.userservice.service;
 
-import ch.qos.logback.core.testUtil.RandomUtil;
-import com.project.userservice.exceptions.PasswordMismatchException;
 import com.project.userservice.exceptions.TokenInvalidException;
-import com.project.userservice.exceptions.UserAlreadyExistsException;
-import com.project.userservice.exceptions.UserNotFoundException;
 import com.project.userservice.models.Token;
 import com.project.userservice.models.User;
 import com.project.userservice.repositories.TokenRepository;
 import com.project.userservice.repositories.UserRepository;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.RandomUtils;
-import org.flywaydb.core.internal.logging.apachecommons.ApacheCommonsLog;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Optional;
 
 @Service
 public class UserService {
     private UserRepository userRepository;
-    private TokenRepository tokenRepository;
     private BCryptPasswordEncoder bCryptPasswordEncoder;
-    @Autowired
-    public UserService(UserRepository userRepository,TokenRepository tokenRepository,BCryptPasswordEncoder bCryptPasswordEncoder)
-    {
-        this.userRepository=userRepository;
-        this.bCryptPasswordEncoder=bCryptPasswordEncoder;
-        this.tokenRepository=tokenRepository;
-    }
-    public User signUp(String name,String email, String password) throws UserAlreadyExistsException {
-        Optional<User> userOptional = userRepository.findByEmail(email);
-        if(userOptional.isPresent())
-        {
-            throw new UserAlreadyExistsException("User already exists");
-        }
-        User user= new User();
-        user.setEmail(email);
-        user.setName(name);
-        user.setHashedPassword(bCryptPasswordEncoder.encode(password));
-        return userRepository.save(user);
+    private TokenRepository tokenRepository;
+
+    public UserService(UserRepository userRepository,
+                       BCryptPasswordEncoder bCryptPasswordEncoder,
+                       TokenRepository tokenRepository) {
+        this.userRepository = userRepository;
+        this.bCryptPasswordEncoder = bCryptPasswordEncoder;
+        this.tokenRepository = tokenRepository;
     }
 
-    public Token login(String email,String password) throws UserNotFoundException, PasswordMismatchException
-    {
-        Optional<User> userOptional=userRepository.findByEmail(email);
-        if(userOptional.isEmpty())
-        {
-            throw new UserNotFoundException("User not found");
+    public User signUp(String fullName,
+                       String email,
+                       String password) {
+        User u = new User();
+        u.setEmail(email);
+        u.setName(fullName);
+        u.setHashedPassword(bCryptPasswordEncoder.encode(password));
+
+        User user = userRepository.save(u);
+
+        return user;
+    }
+
+    public Token login(String email, String password) {
+        Optional<User> userOptional = userRepository.findByEmail(email);
+
+        if (userOptional.isEmpty()) {
+            // throw user not exists exception
+            return null;
         }
-        User user=userOptional.get();
-        if(bCryptPasswordEncoder.matches(password, user.getHashedPassword()))
-        {
-            Token token = new Token();
-            token.setUser(user);
-            LocalDate localDate= LocalDate.now().plus(30,java.time.temporal.ChronoUnit.DAYS);
-            LocalDateTime localDateTime = localDate.atStartOfDay();
-            // Convert LocalDateTime to Date
-            Date date = Date.from(localDateTime.atZone(java.time.ZoneId.systemDefault()).toInstant());
-            token.setExpiryAt(date);
-            token.setValue(RandomStringUtils.randomAlphanumeric(128));
-            return tokenRepository.save(token);
-        } else {
-            throw new PasswordMismatchException("Password Mismatch");
+
+        User user = userOptional.get();
+
+        if (!bCryptPasswordEncoder.matches(password, user.getHashedPassword())) {
+            // throw password not matching exception
+            return null;
         }
+
+        Token token = getToken(user);
+
+        // TODO 1: Change the above token to a JWT Token
+
+        Token savedToken = tokenRepository.save(token);
+
+        return savedToken;
+    }
+
+    private static Token getToken(User user) {
+        LocalDate today = LocalDate.now();
+        LocalDate thirtyDaysLater = today.plus(30, ChronoUnit.DAYS);
+
+        // Convert LocalDate to Date
+        Date expiryDate = Date.from(thirtyDaysLater.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+        Token token = new Token();
+        token.setUser(user);
+        token.setExpiryAt(expiryDate);
+        token.setValue(RandomStringUtils.randomAlphanumeric(128));
+        return token;
     }
 
     public void logout(String token) throws TokenInvalidException {
@@ -85,12 +95,18 @@ public class UserService {
             throw new TokenInvalidException("Token is invalid");
         }
     }
+
     public User validateToken(String token) {
-        Optional<Token> tokenOptional = tokenRepository.findByValueAndIsDeletedEqualsAndExpiryAtGreaterThan(token,false,new Date());
-        if(tokenOptional.isPresent())
-        {
-            return tokenOptional.get().getUser();
+        Optional<Token> tokenOptional = tokenRepository.
+                findByValueAndIsDeletedEqualsAndExpiryAtGreaterThan(token, false, new Date());
+
+        if (tokenOptional.isEmpty()) {
+            return null;
         }
-        return null;
+
+        // TODO 2: Instead of validating via the DB, as the token is now a JWT
+        // token, validate using JWT
+
+        return tokenOptional.get().getUser();
     }
 }
