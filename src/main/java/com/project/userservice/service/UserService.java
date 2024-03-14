@@ -1,11 +1,15 @@
 package com.project.userservice.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.userservice.dtos.SendEmailEventDto;
 import com.project.userservice.exceptions.TokenInvalidException;
 import com.project.userservice.models.Token;
 import com.project.userservice.models.User;
 import com.project.userservice.repositories.TokenRepository;
 import com.project.userservice.repositories.UserRepository;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -20,13 +24,19 @@ public class UserService {
     private UserRepository userRepository;
     private BCryptPasswordEncoder bCryptPasswordEncoder;
     private TokenRepository tokenRepository;
+    private KafkaTemplate<String,String> kafkaTemplate;
+    private ObjectMapper objectMapper;
 
     public UserService(UserRepository userRepository,
                        BCryptPasswordEncoder bCryptPasswordEncoder,
-                       TokenRepository tokenRepository) {
+                       TokenRepository tokenRepository,
+                       KafkaTemplate<String, String> kafkaTemplate,
+                       ObjectMapper objectMapper) {
         this.userRepository = userRepository;
         this.bCryptPasswordEncoder = bCryptPasswordEncoder;
         this.tokenRepository = tokenRepository;
+        this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public User signUp(String fullName,
@@ -38,7 +48,16 @@ public class UserService {
         u.setHashedPassword(bCryptPasswordEncoder.encode(password));
 
         User user = userRepository.save(u);
-
+        SendEmailEventDto sendEmailEventDto=new SendEmailEventDto();
+        sendEmailEventDto.setTo(email);
+        sendEmailEventDto.setFrom("hridyanshverma99@gmail.com");
+        sendEmailEventDto.setSubject("Welcome to our platform");
+        sendEmailEventDto.setBody("Welcome to our platform. Nice to have you here.");
+        try {
+            kafkaTemplate.send("sendEmail",objectMapper.writeValueAsString(sendEmailEventDto));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
         return user;
     }
 

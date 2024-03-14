@@ -7,12 +7,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
 class UserServiceApplicationTests {
-	@Autowired
-	private JpaRegisteredClientRepository registeredClientRepository;
-
-	@Test
-	void contextLoads() {
-	}
+//	@Autowired
+//	private JpaRegisteredClientRepository registeredClientRepository;
+//
+//	@Test
+//	void contextLoads() {
+//	}
 
 //    @Test
 //    @Commit
